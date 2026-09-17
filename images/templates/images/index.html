@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Cropper Django</title>
+
+
+    <!-- Cropper.js 2 -->
+    <script
+        src="https://unpkg.com/cropperjs@2/dist/cropper.js"
+    ></script>
+
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        body {
+
+            margin: 0;
+
+            padding: 30px;
+
+            font-family: Arial, sans-serif;
+
+            background: #f5f5f5;
+
+            color: #222;
+        }
+
+
+        .container {
+
+            max-width: 1000px;
+
+            margin: auto;
+        }
+
+
+        h1 {
+
+            margin-top: 0;
+        }
+
+
+        .toolbar {
+
+            margin-bottom: 20px;
+
+            display: flex;
+
+            gap: 10px;
+
+            align-items: center;
+
+            flex-wrap: wrap;
+        }
+
+
+        button,
+        input {
+
+            font-size: 15px;
+        }
+
+
+        button {
+
+            padding: 8px 14px;
+
+            cursor: pointer;
+        }
+
+
+        button:disabled {
+
+            cursor: not-allowed;
+
+            opacity: 0.5;
+        }
+
+
+        #cropper-container {
+
+            width: 800px;
+
+            max-width: 100%;
+
+            height: 500px;
+
+            margin-bottom: 20px;
+
+            background: #ddd;
+
+            border: 1px solid #aaa;
+
+            overflow: hidden;
+        }
+
+
+        cropper-canvas {
+
+            width: 100%;
+
+            height: 100%;
+        }
+
+
+        cropper-selection {
+
+            outline: 2px solid white;
+        }
+
+
+        cropper-selection.active cropper-handle {
+
+            display: block;
+        }
+
+
+        cropper-selection:not(.active) cropper-handle {
+
+            display: none;
+        }
+
+
+        cropper-selection:not(.active) cropper-grid,
+        cropper-selection:not(.active) cropper-crosshair {
+
+            display: none;
+        }
+
+
+        cropper-shade {
+
+            opacity: 0;
+
+            pointer-events: none;
+        }
+
+
+        cropper-shade.active {
+
+            opacity: 0.55;
+        }
+
+
+        #result {
+
+            display: none;
+
+            margin-top: 20px;
+        }
+
+
+        #result img {
+
+            max-width: 100%;
+
+            border: 1px solid #aaa;
+        }
+
+
+        .error {
+
+            background: #ffe0e0;
+
+            border: 1px solid #ffaaaa;
+
+            padding: 12px;
+
+            margin-bottom: 20px;
+
+            color: #900;
+        }
+
+
+        .gallery {
+
+            margin-top: 50px;
+        }
+
+
+        .gallery-grid {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(auto-fill, minmax(220px, 1fr));
+
+            gap: 20px;
+        }
+
+
+        .card {
+
+            background: white;
+
+            border: 1px solid #ddd;
+
+            border-radius: 6px;
+
+            padding: 10px;
+        }
+
+
+        .card img {
+
+            display: block;
+
+            width: 100%;
+
+            height: 180px;
+
+            object-fit: contain;
+
+            background: #eee;
+        }
+
+
+        .card-info {
+
+            padding-top: 10px;
+
+            font-size: 13px;
+
+            color: #666;
+        }
+
+
+        .card a {
+
+            display: inline-block;
+
+            margin-top: 8px;
+
+            text-decoration: none;
+
+            color: #06c;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+    <h1>Recadrer une image</h1>
+
+    {% if error %}
+        <div class="error">{{ error }}</div>
+    {% endif %}
+
+
+    <!--
+        Formulaire Django
+    -->
+
+    <form
+        method="POST"
+        enctype="multipart/form-data"
+        id="imageForm"
+    >
+
+        {% csrf_token %}
+
+
+        <div class="toolbar">
+
+            <input
+                type="file"
+                id="fileInput"
+                name="original"
+                accept="image/*"
+            >
+
+
+            <button
+                type="button"
+                id="cropButton"
+                disabled
+            >
+                Recadrer
+            </button>
+
+
+            <button
+                type="submit"
+                id="saveButton"
+                disabled
+            >
+                Enregistrer
+            </button>
+
+        </div>
+
+
+        <!--
+            Le résultat du crop sera placé ici
+            sous forme de base64.
+        -->
+
+        <input
+            type="hidden"
+            name="cropped"
+            id="croppedInput"
+        >
+
+        <input type="hidden" name="crop_x" id="cropX">
+        <input type="hidden" name="crop_y" id="cropY">
+        <input type="hidden" name="crop_width" id="cropWidth">
+        <input type="hidden" name="crop_height" id="cropHeight">
+        <input type="hidden" name="image_transform" id="imageTransform">
+
+        <input type="hidden" name="image_id" id="imageId">
+
+
+        <div id="cropper-container">
+
+            <cropper-canvas
+                id="canvas"
+                background
+            >
+
+                <cropper-image
+                    id="image"
+                    alt="Image"
+                    rotatable
+                    scalable
+                    translatable
+                ></cropper-image>
+
+
+                <cropper-shade
+                    id="shade"
+                ></cropper-shade>
+
+
+                <cropper-handle
+                    action="select"
+                    plain
+                ></cropper-handle>
+
+
+                <cropper-selection
+                    id="selection"
+                    initial-coverage="0.6"
+                    movable
+                    resizable
+                    outlined
+                    precise
+                >
+
+                    <cropper-grid
+                        role="grid"
+                        covered
+                    ></cropper-grid>
+
+
+                    <cropper-crosshair
+                        centered
+                    ></cropper-crosshair>
+
+
+                    <cropper-handle
+                        action="move"
+                    ></cropper-handle>
+
+
+                    <cropper-handle
+                        action="n-resize"
+                    ></cropper-handle>
+
+                    <cropper-handle
+                        action="e-resize"
+                    ></cropper-handle>
+
+                    <cropper-handle
+                        action="s-resize"
+                    ></cropper-handle>
+
+                    <cropper-handle
+                        action="w-resize"
+                    ></cropper-handle>
+
+
+                    <cropper-handle
+                        action="ne-resize"
+                    ></cropper-handle>
+
+                    <cropper-handle
+                        action="nw-resize"
+                    ></cropper-handle>
+
+                    <cropper-handle
+                        action="se-resize"
+                    ></cropper-handle>
+
+                    <cropper-handle
+                        action="sw-resize"
+                    ></cropper-handle>
+
+                </cropper-selection>
+
+            </cropper-canvas>
+
+        </div>
+
+
+        <div id="result">
+
+            <h2>Aperçu du résultat</h2>
+
+            <img
+                id="resultImage"
+                alt="Résultat du crop"
+            >
+
+        </div>
+
+    </form>
+
+
+    <!--
+        Galerie des images enregistrées
+    -->
+
+    <div class="gallery">
+
+        <h2>Images enregistrées</h2>
+
+        {% if images %}
+
+            <div class="gallery-grid">
+
+                {% for item in images %}
+
+                    <div class="card">
+
+                        <h3>Originale</h3>
+
+                        <img
+                            src="{{ item.original.url }}"
+                            alt="Image originale"
+                        >
+
+                        <h3>Crop</h3>
+
+                        <img
+                            src="{{ item.cropped.url }}"
+                            alt="Image croppée"
+                        >
+
+                        <div class="card-info">
+
+                            <span>
+                                {{ item.created_at|date:"d/m/Y H:i" }}
+                            </span>
+
+                            <div class="card-actions">
+
+                                <button
+                                    type="button"
+                                    class="edit-button"
+                                    data-id="{{ item.id }}"
+                                    data-original="{{ item.original.url }}"
+                                    data-x="{{ item.crop_x }}"
+                                    data-y="{{ item.crop_y }}"
+                                    data-width="{{ item.crop_width }}"
+                                    data-height="{{ item.crop_height }}"
+                                >
+                                    Modifier
+                                </button>
+
+                                <a
+                                    href="{{ item.cropped.url }}"
+                                    download
+                                >
+                                    Télécharger
+                                </a>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <script type="application/json" id="transform-{{ item.id }}">
+                        {{ item.image_transform|safe }}
+                    </script>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <p>
+                Aucune image enregistrée.
+            </p>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+<script>
+
+    // =========================================================
+    // ÉLÉMENTS HTML
+    // =========================================================
+
+    const form = document.getElementById("imageForm");
+    const fileInput = document.getElementById("fileInput");
+    const cropButton =  document.getElementById("cropButton");
+    const saveButton = document.getElementById("saveButton");
+    const croppedInput = document.getElementById("croppedInput");
+    const cropXInput = document.getElementById("cropX");
+    const cropYInput = document.getElementById("cropY");
+    const cropWidthInput = document.getElementById("cropWidth");
+    const cropHeightInput = document.getElementById("cropHeight");   
+    const imageTransformInput = document.getElementById("imageTransform");
+    const imageIdInput = document.getElementById("imageId");
+    const canvas = document.getElementById("canvas");
+    const image = document.getElementById("image");
+    const selection = document.getElementById("selection");
+    const shade = document.getElementById("shade");
+    const result = document.getElementById("result");
+    const resultImage = document.getElementById("resultImage");
+
+
+    // =========================================================
+    // VARIABLES
+    // =========================================================
+
+    let objectUrl = null;
+    let croppedCanvas = null;
+    let editMode = false;
+
+
+    // =========================================================
+    // ACTIVATION DU CROP
+    // =========================================================
+
+    function activateCrop() {
+        selection.classList.add("active");
+        shade.classList.add("active");
+    }
+
+
+    // =========================================================
+    // DÉSACTIVATION DU CROP
+    // =========================================================
+
+    function deactivateCrop() {
+        selection.classList.remove("active");
+        shade.classList.remove("active");
+    }
+
+
+    // =========================================================
+    // RÉINITIALISER LE FORMULAIRE
+    // =========================================================
+
+    function resetForm() {
+
+        editMode = false;
+
+        imageIdInput.value = "";
+
+        croppedInput.value = "";
+
+        cropXInput.value = "";
+
+        cropYInput.value = "";
+
+        cropWidthInput.value = "";
+
+        cropHeightInput.value = "";
+
+        croppedCanvas = null;
+
+        result.style.display = "none";
+
+        resultImage.src = "";
+
+        saveButton.disabled = true;
+
+        cropButton.disabled = true;
+
+        fileInput.value = "";
+
+        if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+        }
+
+        image.removeAttribute("src");
+
+        deactivateCrop();
+    }
+
+
+    // =========================================================
+    // CHARGEMENT D'UNE IMAGE
+    // =========================================================
+
+    fileInput.addEventListener(
+        "change",
+        () => {
+
+            const file = fileInput.files[0];
+
+
+            if (!file) {
+                return;
+            }
+
+
+            // Nouvelle image
+            editMode = false;
+
+            imageIdInput.value = "";
+
+            croppedInput.value = "";
+
+            croppedCanvas = null;
+
+            result.style.display = "none";
+
+            resultImage.src = "";
+
+            saveButton.disabled = true;
+
+            cropButton.disabled = false;
+
+
+            // Supprime l'ancien Object URL
+
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+
+
+            // Création d'un nouvel Object URL
+
+            objectUrl = URL.createObjectURL(file);
+
+
+            // Chargement dans Cropper.js
+
+            image.addEventListener(
+                "load",
+                () => {
+                    selection.$reset();
+                    selection.$center();
+                    activateCrop();
+                },
+                {
+                    once: true
+                }
+            );
+
+            image.src = objectUrl;
+
+        }
+    );
+
+
+    // =========================================================
+    // CLIC SUR LA SÉLECTION
+    // =========================================================
+
+    selection.addEventListener(
+        "pointerdown",
+        () => {
+            activateCrop();
+        }
+    );
+
+
+    // =========================================================
+    // CLIC EN DEHORS DE LA SÉLECTION
+    // =========================================================
+
+    canvas.addEventListener(
+        "pointerdown",
+        (event) => {
+
+            const path = event.composedPath();
+
+            if (!path.includes(selection)) {
+                deactivateCrop();
+            }
+
+        }
+    );
+
+
+    // =========================================================
+    // RÉCUPÉRER LES COORDONNÉES DU CROP
+    // =========================================================
+
+    function saveCropCoordinates() {
+        const x = Number(selection.x);
+        const y = Number(selection.y);
+        const width = Number(selection.width);
+        const height = Number(selection.height);
+
+        if (
+            !Number.isFinite(x) ||
+            !Number.isFinite(y) ||
+            !Number.isFinite(width) ||
+            !Number.isFinite(height) ||
+            width <= 0 ||
+            height <= 0
+        ) {
+            console.error("Coordonnées invalides :", {
+                x,
+                y,
+                width,
+                height
+            });
+
+            return false;
+        }
+
+        cropXInput.value = x;
+        cropYInput.value = y;
+        cropWidthInput.value = width;
+        cropHeightInput.value = height;
+
+        // Transformation actuelle de l'image
+        const transform = image.$getTransform();
+
+        imageTransformInput.value = JSON.stringify(Array.from(transform));
+
+        return true;
+    }
+
+
+    // =========================================================
+    // RECADRAGE
+    // =========================================================
+
+    cropButton.addEventListener(
+        "click",
+        async () => {
+
+            const width = Number(selection.width);
+            const height = Number(selection.height);
+
+            if (
+                !Number.isFinite(width) ||
+                !Number.isFinite(height) ||
+                width <= 0 ||
+                height <= 0
+            ) {
+                alert("Veuillez sélectionner une zone de recadrage.");
+                return;
+            }
+
+            // Sauvegarde des coordonnées
+            const coordinatesSaved = saveCropCoordinates();
+
+            if (!coordinatesSaved) {
+                alert("Les coordonnées du crop sont invalides.");
+                return;
+            }
+
+            try {
+
+                // Génération du crop
+                croppedCanvas = await selection.$toCanvas();
+
+                // Conversion en Base64
+                const dataUrl = croppedCanvas.toDataURL("image/png");
+
+                if (
+                    !dataUrl ||
+                    dataUrl === "data:,"
+                ) {
+                    alert("Impossible de générer l'image croppée.");
+                    return;
+                }
+
+                // Stockage pour Django
+                croppedInput.value = dataUrl;
+
+                // Aperçu
+                resultImage.src = dataUrl;
+
+                result.style.display = "block";
+
+                // Autoriser l'enregistrement
+                saveButton.disabled = false;
+            }
+            catch (error) {
+                console.error("Erreur lors du recadrage :", error);
+                alert("Impossible de recadrer l'image.");
+            }
+        }
+    );
+
+
+    // =========================================================
+    // MODIFIER UNE IMAGE EXISTANTE
+    // =========================================================
+
+    function resetCropResult() {
+
+        croppedCanvas = null;
+
+        croppedInput.value = "";
+
+        cropXInput.value = "";
+        cropYInput.value = "";
+        cropWidthInput.value = "";
+        cropHeightInput.value = "";
+
+        resultImage.src = "";
+
+        result.style.display = "none";
+
+        saveButton.disabled = true;
+    }
+
+
+    function editImage(id, originalUrl, x, y, width, height, transform) {
+        editMode = true;
+
+        imageIdInput.value = id;
+
+        resetCropResult();
+
+        fileInput.value = "";
+        cropButton.disabled = false;
+
+        const cropX = Number(x);
+        const cropY = Number(y);
+        const cropWidth = Number(width);
+        const cropHeight = Number(height);
+
+        if (
+            !Number.isFinite(cropX) ||
+            !Number.isFinite(cropY) ||
+            !Number.isFinite(cropWidth) ||
+            !Number.isFinite(cropHeight)
+        ) {
+            console.error("Coordonnées invalides");
+            return;
+        }
+
+        if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+        }
+
+        image.src = originalUrl;
+
+        /*
+        * On laisse Cropper.js terminer l'initialisation
+        * de l'image et de la sélection.
+        */
+        requestAnimationFrame(() => {
+
+            requestAnimationFrame(() => {
+
+                if (
+                    Array.isArray(transform) &&
+                    transform.length === 6
+                ) {
+                    image.$setTransform(transform);
+                }
+
+                selection.$change(
+                    cropX,
+                    cropY,
+                    cropWidth,
+                    cropHeight
+                );
+
+                selection.$render();
+                activateCrop();
+            });
+
+        });
+    }
+
+
+    // =========================================================
+    // BOUTONS "MODIFIER"
+    // =========================================================
+
+    document
+        .querySelectorAll(".edit-button")
+        .forEach(
+            button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        const id = button.dataset.id;
+
+                        const original = button.dataset.original;
+
+                        const x = parseFloat(button.dataset.x);
+
+                        const y = parseFloat(button.dataset.y);
+
+                        const width = parseFloat(button.dataset.width);
+
+                        const height = parseFloat(button.dataset.height);
+                        
+                        const transformElement = document.getElementById(`transform-${button.dataset.id}`);
+
+                        let transform = [];
+
+                        if (transformElement) {
+                            try {
+                                transform = JSON.parse(transformElement.textContent.trim());
+                            } catch (error) {
+                                console.error("Transformation invalide :", error);
+                            }
+                        }
+
+                        editImage(
+                            id,
+                            original,
+                            x,
+                            y,
+                            width,
+                            height,
+                            transform
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+
+    // =========================================================
+    // AVANT ENVOI DU FORMULAIRE
+    // =========================================================
+
+    form.addEventListener(
+        "submit",
+        event => {
+
+            if (!croppedInput.value) {
+                event.preventDefault();
+                alert("Veuillez cliquer sur « Recadrer » avant d'enregistrer.");
+                return;
+            }
+
+            const coordinatesSaved = saveCropCoordinates();
+
+            if (!coordinatesSaved) {
+                event.preventDefault();
+                alert("Les coordonnées du crop sont invalides.");
+                return;
+            }
+        }
+    );
+
+
+</script>
+
+
+</body>
+
+</html>
